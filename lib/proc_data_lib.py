@@ -1,12 +1,73 @@
 import sys 
 import os, os.path
-sys.path.append('/lib/kiswav')
+sys.path.append('lib/kiswav')
 import bumpwavelet_minimal as bw
+
+
+# File import 
+
+def import_file(data_path, label_path):
+    dirs = os.listdir(data_path)
+    dirs_label = os.listdir(label_path)
+
+
+    label_list = []
+    label_names = []
+
+    # Process .txt labels. Create list with structure:
+    # list of [start_time, end_time, tag] entries
+    signal_list = []
+
+    for file in dirs:
+        if file.endswith('.wav'):
+            fs, signal = read(data_path + file)
+            print 'Processing', file
+            signal_list.append(signal)
+    print 'Processed %i files.'%len(signal_list) 
+           
+    for file in dirs_label:
+        if file.endswith('.txt'):
+            filename = label_path + file
+            with open(filename) as f:
+                reader = csv.reader(f, delimiter = ' ')
+                label_list.append(list(reader)) # Class labels
+                label_names.append(file) # Save class name in separate array
+    print 'Processed %i labels.'%len(label_list) 
+    return signal_list, label_list, fs
+
+
+# Data label processing
+
+
+# Select majority voting or other options
+def proc_label(signal_list = signal_list, label_list = label_list, select_label = 5, maj_vote = False):
+
+    select_label = 5 # 0: ac, 4 cm, 5 dz, 6 ms
+    count_method = 'dz'
+
+    t = np.array(label_list[0])
+    print label_names
+
+
+    t_array = []
+    t = []    
+
+    print 'Using label', label_names[select_label]
+    for index, item in enumerate(label_list[select_label]):
+        t_entry = [float(i) for i in item]
+    #     t_entry = np.repeat(t_entry,int(label_interval*fs))  # Upsample labels to match sample rate of signal
+        t.append(t_entry[:len(signal_list[index-1])])    # -1 Corrects for extra label present
+
+    t = np.delete(t, (0), axis = 0)
+    # t_array.append(np.array(t))
+    return t
+
+
 
 
 # Feature extraction function
 
-def proc_data_humbug(signal_list, t, fs, img_height, img_width, nfft = 512, overlap = 256, label_interval = 0.1):
+def proc_data_humbug(signal_list, t = t, fs = fs, img_height = 256, img_width = 10, nfft = 512, overlap = 256, label_interval = 0.1):
                
     """Returns the training data x,y and the parameter input_shape required for initialisation of neural networks. 
     
