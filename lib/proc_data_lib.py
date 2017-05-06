@@ -1,7 +1,17 @@
+# Custom packages
 import sys 
 import os, os.path
 sys.path.append('lib/kiswav')
 import bumpwavelet_minimal as bw
+
+# Library modules
+
+from scipy.io.wavfile import read, write
+import csv
+import matplotlib.pyplot as plt
+import numpy as np
+
+
 
 
 # File import 
@@ -33,14 +43,14 @@ def import_file(data_path, label_path):
                 label_list.append(list(reader)) # Class labels
                 label_names.append(file) # Save class name in separate array
     print 'Processed %i labels.'%len(label_list) 
-    return signal_list, label_list, fs
+    return signal_list, label_list, label_names, fs
 
 
 # Data label processing
 
 
 # Select majority voting or other options
-def proc_label(signal_list = signal_list, label_list = label_list, select_label = 5, maj_vote = False):
+def proc_label(signal_list, label_list, label_names, select_label = 5, maj_vote = False):
 
     select_label = 5 # 0: ac, 4 cm, 5 dz, 6 ms
     count_method = 'dz'
@@ -67,7 +77,7 @@ def proc_label(signal_list = signal_list, label_list = label_list, select_label 
 
 # Feature extraction function
 
-def proc_data_humbug(signal_list, t = t, fs = fs, img_height = 256, img_width = 10, nfft = 512, overlap = 256, label_interval = 0.1):
+def proc_data_humbug(signal_list, t, fs, img_height = 256, img_width = 10, nfft = 512, overlap = 256, label_interval = 0.1):
                
     """Returns the training data x,y and the parameter input_shape required for initialisation of neural networks. 
     
