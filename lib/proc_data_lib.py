@@ -11,6 +11,17 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Keras-related imports
+from keras.models import Sequential
+from keras.regularizers import WeightRegularizer
+from keras.layers import Dense, Dropout, Activation, Flatten, LSTM
+from keras.layers import Convolution1D, MaxPooling2D, Convolution2D
+from keras import backend as K
+K.set_image_dim_ordering('th')
+from keras.callbacks import ModelCheckpoint
+from keras.callbacks import RemoteMonitor
+from keras.callbacks import EarlyStopping
+from keras.models import load_model
 
 
 
@@ -31,7 +42,7 @@ def import_file(data_path, label_path):
     for file in dirs:
         if file.endswith('.wav'):
             fs, signal = read(data_path + file)
-            print 'Processing', file
+            # print 'Processing', file
             signal_list.append(signal)
     print 'Processed %i files.'%len(signal_list) 
            
@@ -72,6 +83,25 @@ def proc_label(signal_list, label_list, label_names, select_label = 5, maj_vote 
     # t_array.append(np.array(t))
     return t
 
+# Training, test signal split for ECML paper
+
+def data_split(signal_list, t, test_idx):
+    train_idx = np.arange(len(t))
+    train_idx = np.delete(train_idx, test_idx)
+
+    test_x = []
+    test_t = []
+    train_x = []
+    train_t = []
+
+    for idx in test_idx:
+        test_x.append(signal_list[idx])
+        test_t.append(t[idx])
+
+    for idx in train_idx:
+        train_x.append(signal_list[idx])
+        train_t.append(t[idx])
+    return train_x, train_t, test_x, test_t
 
 
 
@@ -136,9 +166,9 @@ def proc_data_humbug(signal_list, t, fs, img_height = 256, img_width = 10, nfft 
     for i in np.arange(len(spec_list)):
         n_max = np.floor(np.divide(np.shape(spec_list[i][0])[1],img_width)).astype('int')
 
-        print 'Processing signal number', i
-        print 'Length of spec', np.shape(spec_list[i][0])[1]
-        print 'Number of training inputs for this signal:', n_max    
+        #print 'Processing signal number', i
+        #print 'Length of spec', np.shape(spec_list[i][0])[1]
+        #print 'Number of training inputs for this signal:', n_max    
         for n in np.arange(n_max):
             #print 'n', n, np.shape(spec_training_list[i][0])
             x_train.append(spec_list[i][0][:img_height,img_width*n:img_width*(n+1)])
@@ -180,7 +210,8 @@ def proc_data_humbug(signal_list, t, fs, img_height = 256, img_width = 10, nfft 
 # Wavelet feature extraction
 
 
-def proc_data_bumpwav(signal_list, t, fs, img_height, img_width, label_interval = 0.1, binning = 'mean', nfft = 512, overlap = 256):
+def proc_data_bumpwav(signal_list, t, fs, img_height, img_width, label_interval = 0.1, binning = 'mean', nfft = 512, overlap = 256, save_weights = False,
+                    ):
                
     """Returns the training data x,y and the parameter input_shape required for initialisation of neural networks. 
     
@@ -305,7 +336,99 @@ def proc_data_bumpwav(signal_list, t, fs, img_height, img_width, label_interval 
 
     return x_train, y_train_mean, input_shape#, spec_list, t_list
     
+# Neural network training
 
+def train_nn(model, x_train, y_train, x_test, y_test, conv, batch_size = 256, nb_epoch = 20, save_weights = False):
+    # if data_method == 'wav':
+    #     x_train_caged = x_train_wav
+    #     y_train_caged = y_train_wav
+    #     x_train = x_train_wav
+    #     y_train = y_train_wav
+    #     x_test = x_test_wav
+    #     y_test= y_test_wav
+
+    # elif data_method == 'spec':
+    #     y_test = y_test_spec
+    #     x_test = x_test_spec
+    #     x_train = x_train_spec
+    #     y_train = y_train_spec
+    #     x_train_caged = x_train
+    #     y_train_caged = y_train_spec
+    # #input_shape = (1, x_train.shape[2], 10)
+
+    # elif data_method == 'spec_cut':
+    #     # Load wavelet for parameter matching
+    #     data = np.load('Outputs/humbug_conv_wavelet_247_1_1_dz_interp.npz')
+    #     print data.files
+    #     # x_train_wav = data["x_train"]
+    #     # y_train_wav = data["y_train"]
+    #     # x_test_wav = data["x_test"]
+    #     # y_test_wav = data["y_test"]
+    #     wav_freq = data["wav_freq"]
+    #     cut_freq = np.where(spec_freq > wav_freq[-1])[0]
+    #     # Reshape for CNN
+    #     if conv:
+    #         x_train = x_train_spec[:,:,cut_freq,:]
+    #         x_test = x_test_spec[:,:,cut_freq,:]
+    #     # Reshape for MLP
+    #     else:
+    #         x_train = x_train_spec[:,cut_freq*spec_window]
+    #         x_test = x_test_spec[:,cut_freq*spec_window]
+    #         x_train_caged = x_train
+    #     y_test = y_test_spec
+    #     y_train = y_train_spec
+    #     y_train_caged = y_train_spec
+    #     print input_shape
+    #     spec_freq = spec_freq[cut_freq]
+    # elif data_method == 'raw':
+    #     x_train_caged = x_train_raw
+    #     y_train_caged = y_train_raw
+    #     x_train = x_train_raw
+    #     y_train = y_train_raw
+    #     x_test = x_test_raw
+    #     y_test= y_test_raw
+
+
+    ##################### MLP execution Code ##########################
+    if not conv:
+        print 'Using MLP:'
+        if x_train.ndim > 2:
+            x_train = x_train.reshape(x_train.shape[0], x_train.shape[-2]*x_train.shape[-1])
+            x_test = x_test.reshape(x_test.shape[0], x_test.shape[-2]*x_test.shape[-1])
+       
+        # Optional code to save weights for further visualisation
+
+        if save_weights == False:
+            print 'Training data shape:', np.shape(x_train)
+            early_stopping = EarlyStopping(monitor='acc', patience = 5, verbose=0, mode='auto')
+
+            hist = model.fit(x_train, y_train, batch_size=batch_size, nb_epoch=nb_epoch, 
+                      verbose=2, callbacks = [early_stopping])
+            return model, hist    
+
+        #y_train_caged = y_train_wav
+        if save_weights == True:    
+            n_hidden = model.layers[0].get_config()['output_dim']
+            print 'Training data shape:', np.shape(x_train)
+            Weights = np.zeros([nb_epoch,np.shape(x_train)[1],n_hidden])
+            for i in range(nb_epoch):
+                print 'Epoch number', i+1, 'of', nb_epoch
+                hist = model.fit(x_train, y_train, batch_size=batch_size, validation_split = 0., nb_epoch=1, 
+                          verbose=2)
+                W = model.layers[0].W.get_value(borrow=True)
+                Weights[i,:,:] = W
+        return model, Weights
+                
+    ##################### CNN execution code ##########################
+    if conv:
+        print 'Using CNN:'
+        print 'Training data shape:', np.shape(x_train)
+
+        early_stopping = EarlyStopping(monitor='acc', patience = 5, verbose=0, mode='auto')
+
+        hist = model.fit(x_train, y_train, batch_size=batch_size, nb_epoch=nb_epoch, 
+                  verbose=2, callbacks = [early_stopping])
+        return model, hist
 
 
 
