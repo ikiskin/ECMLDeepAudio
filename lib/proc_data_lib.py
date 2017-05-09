@@ -23,6 +23,14 @@ from keras.callbacks import RemoteMonitor
 from keras.callbacks import EarlyStopping
 from keras.models import load_model
 
+# Data post-processing and analysis
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import average_precision_score
+from sklearn.metrics import f1_score
+from scipy.signal import medfilt
+
 
 
 # File import 
@@ -431,9 +439,7 @@ def train_nn(model, x_train, y_train, x_test, y_test, conv, batch_size = 256, nb
         return model, hist
 
 
-
-
-# Data post-processing functions
+# Visualise output, plot performance metrics from predictions and ground truth
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
@@ -467,6 +473,125 @@ def plot_confusion_matrix(cm, classes,
     #plt.colorbar()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
+
+def plot_output(x_test, y_test, model, median_filtering = False, kernel_size = 31, x_lim = None):
+    
+
+    score = model.evaluate(x_test, y_test, verbose=2)
+    predictions = model.predict(x_test)
+    # print('Test score:', score[0])
+    # print('Test accuracy:', score[1])
+
+
+
+
+
+    ########### 2 class predictions #####################################################
+    positive_predictions = predictions[:,0][np.where(y_test[:,0])]
+    negative_predictions = predictions[:,1][np.where(y_test[:,1])]
+
+    if median_filtering:
+        filt_predictions = np.zeros(np.shape(predictions))
+        predictions[:,0] = medfilt(predictions[:,0], kernel_size = kernel_size)
+        predictions[:,1] = 1 - filt_predictions[:,0]
+        positive_predictions = predictions[:,0][np.where(y_test[:,0])]
+        negative_predictions = predictions[:,1][np.where(y_test[:,1])]
+
+
+
+    true_positive_rate = (sum(np.round(positive_predictions)))/sum(y_test[:,0])
+    true_negative_rate = sum(np.round(negative_predictions))/sum(y_test[:,1])
+
+
+
+    figs = []
+
+    f = plt.figure(figsize = (12,6))
+    plt.plot(predictions[:,0],'g.', markersize = 12, label = 'y_pred')
+    plt.plot(y_test[:,0], '--b', linewidth = 1, markersize = 2, label = 'y_test')
+        
+    plt.legend(loc = 9, ncol = 2)
+
+    plt.ylim([-0.1,1.4])
+    plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    if x_lim:
+        plt.xlim([x_lim[0], x_lim[1]])
+    plt.ylabel('Classifier output')
+    plt.xlabel('Signal window number')
+    # if save_fig == 'publication_softmax':
+    #     plt.tight_layout()
+    #     plt.savefig('../../../TexFiles/Papers/ECML/Images/softmax_' + model_name + '.pdf')
+        
+    # if save_fig_individual:
+    #     plt.savefig('Outputs/' + 'solo_softmax_' + model_name + '.pdf')
+
+    # figs.append(f)
+    print 'True positive rate', true_positive_rate, 'True negative rate', true_negative_rate
+
+    #plt.savefig('Outputs/' + 'ClassOutput_' + model_name + '.pdf', transparent = True)
+    #print 'saved as', 'ClassOutput_' + model_name + '.pdf' 
+    #plt.show()
+
+
+    cnf_matrix = confusion_matrix(y_test[:,1], np.round(predictions[:,1]).astype(int))
+
+    f, (ax1, ax2) = plt.subplots(1,2,figsize=(12,6))
+
+    y_true = y_test[:,0]
+    y_score = predictions[:,0]
+    roc_score = roc_auc_score(y_true, y_score)
+    fpr, tpr, thresholds = roc_curve(y_true, y_score)
+
+
+    #plt.subplot(1,2,2)
+    #plt.figure(figsize=(4,4))
+    ax1.plot(fpr, tpr, '.-')
+    ax1.plot([0,1],[0,1],'k--')
+    ax1.set_xlim([-0.01, 1.01])
+    ax1.set_ylim([-0.01, 1.01])
+    ax1.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    ax1.set_xlabel('False positive rate')
+    ax1.set_ylabel('True positive rate')
+    ax1.set_title('ROC, area = %.4f'%roc_score)
+
+
+
+
+    y_test_pr = y_test[:,0]
+
+    precision = dict()
+    recall = dict()
+    average_precision = dict()
+    for i in range(1):
+        precision[i], recall[i], _ = precision_recall_curve(y_test_pr,
+                                                            y_score)
+        average_precision[i] = average_precision_score(y_test_pr, y_score)
+
+    # Plot Precision-Recall curve
+    #plt.clf()
+    ax2.plot(recall[0], precision[0], color='b',
+             label='Precision-Recall curve')
+    ax2.set_xlabel('Recall')
+    ax2.set_ylabel('Precision')
+    ax2.set_ylim([0.0, 1.05])
+    ax2.set_xlim([0.0, 1.0])
+    ax2.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    ax2.set_title('Precision-Recall, area = {0:0.3f}'.format(average_precision[0]))
+    #plt.legend(loc="lower left")
+    # if save_fig == 'publication':
+    #     plt.tight_layout()
+    #     plt.savefig('/Outputs/Papers/ECML/Images/metric_' + model_name + '.pdf')
+    # plt.show()
+        
+    F1 = f1_score(np.round(predictions[:,0]), y_test[:,0], average='binary')  
+    print 'F1 score', F1    
+    perf_metrics ={"tpr": true_positive_rate, "tnr": true_negative_rate, "f1": F1, "roc":roc_score, "pr":average_precision[0], "conf_matrix":cnf_matrix}
+    
+    return perf_metrics
+
+
+
+
 
 
 
@@ -522,14 +647,14 @@ def retrieve_hyp_opt(acc_xval_full_list, nb_filters, dense_sizes, kernel_sizes):
 
 ## Cross-validation functions
 
-def crossval(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch, early_stop_metric = 'acc', discard = True):
+def crossval(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch, x_test = None, y_test = None, early_stop_metric = 'acc'):
 #     Create dictionary with test scores that are labelled by the keys: kernel_size, nb_dense etc.
 # Choose early stopping metric (default training accuracy)
     input_shape = (1, x.shape[2], x.shape[-1])
     nb_classes = 2
     batch_size = 256
     
-    xval_dict = {"kernel_sizes":kernel_sizes, "n_dense":n_dense,"filter_numbers":filter_numbers}
+    xval_dict = {"kernel_sizes":kernel_sizes, "n_dense":dense_numbers,"filter_numbers":filter_numbers}
     full_dict = {}
     acc_xval_full_list = []
     acc_xval_test_full_list = []
@@ -587,7 +712,10 @@ def crossval(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch
                     hist = model.fit(x_tr, y_tr, batch_size=batch_size, nb_epoch=max_epoch,
                               verbose=0, callbacks = [early_stopping], validation_data = (x_val, y_val))
 
-                    score = model.evaluate(x_test, y_test, verbose=0)
+                    if x_test is not None:
+                        score = model.evaluate(x_test, y_test, verbose=0)
+                    else:
+                        score = [0,0]
                     acc = hist.history["acc"][-1]
                     val_acc = hist.history["val_acc"][-1]
 
@@ -597,7 +725,8 @@ def crossval(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch
                     #predictions = model.predict(x_test)
     #                 print('xval run %i score:'%n, score[0])
                     print('xval run', n, 'val accuracy:', val_acc, 'train accuracy:', acc)
-                    print('xval run', n, 'test accuracy:', score[1])
+                    if x_test is not None:
+                        print('xval run', n, 'test accuracy:', score[1])  
                 acc_xval_list.append(acc_xval)
                 acc_xval_test_list.append(acc_xval_test)
                 val_acc_xval_list.append(val_acc_xval)
@@ -616,7 +745,7 @@ def crossval(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch
 
 
 
-def crossval_MLP(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch, early_stop_metric = 'acc', discard = True):
+def crossval_MLP(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_epoch, x_test = None, y_test = None, early_stop_metric = 'acc'):
 #     Create dictionary with test scores that are labelled by the keys: kernel_size, nb_dense etc.
 # Choose early stopping metric (default training accuracy)
 #     input_shape = (1, x.shape[2], x.shape[-1])
@@ -691,7 +820,10 @@ def crossval_MLP(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_e
                     hist = model.fit(x_tr, y_tr, batch_size=batch_size, nb_epoch=max_epoch,
                               verbose=0, callbacks = [early_stopping], validation_data = (x_val, y_val))
 
-                    score = model.evaluate(x_test, y_test, verbose=0)
+                    if x_test is not None:
+                        score = model.evaluate(x_test, y_test, verbose=0)
+                    else:
+                        score = [0,0]
                     acc = hist.history["acc"][-1]
                     val_acc = hist.history["val_acc"][-1]
 
@@ -701,7 +833,9 @@ def crossval_MLP(x, y, folds, filter_numbers, dense_numbers, kernel_sizes, max_e
                     #predictions = model.predict(x_test)
     #                 print('xval run %i score:'%n, score[0])
                     print('xval run', n, 'val accuracy:', val_acc, 'train accuracy:', acc)
-                    print('xval run', n, 'test accuracy:', score[1])
+                    if x_test is not None:
+                        print('xval run', n, 'test accuracy:', score[1])                    
+
                 acc_xval_list.append(acc_xval)
                 acc_xval_test_list.append(acc_xval_test)
                 val_acc_xval_list.append(val_acc_xval)
