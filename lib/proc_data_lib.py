@@ -587,11 +587,136 @@ def plot_output(x_test, y_test, model, median_filtering = False, kernel_size = 3
     print 'F1 score', F1    
     perf_metrics ={"tpr": true_positive_rate, "tnr": true_negative_rate, "f1": F1, "roc":roc_score, "pr":average_precision[0], "conf_matrix":cnf_matrix}
     
-    return perf_metrics
+    return predictions, perf_metrics
+
+
+## Analyse statistics of test samples
+
+############### Chooose whether or not to save figure#################
+def anal_test(predictions, x_test, frac_data = 0.1, save_fig = False, conv = True
+    suffix = ''
+
+
+    #### Statistics of samples that trigger a high response
+    frac_data = 0.1
+    sort_index = np.argsort(predictions[:,0])
+    sort_index_low = np.argsort(predictions[:,1])
+
+
+    print 'Number of test samples', len(x_test)
+    n_response_samples = int(len(x_test) * frac_data)
+    print 'Number of high response samples,', n_response_samples, 'percentage of test data', frac_data * 100, '%'
+
+    high_response_samples = x_test[sort_index[(len(sort_index) - n_response_samples):]]
+    low_response_samples = x_test[sort_index_low[(len(sort_index_low) - n_response_samples):]]
+
+    print 'Number of high response samples', n_response_samples, 'data shape', np.shape(high_response_samples)
+    #plot amplitude vs frequency for 1 dimensional signal bin?
+    #plt.plot(spec_freq or wav_freq, )
+    if conv:
+        high_response_samples = high_response_samples.reshape([high_response_samples.shape[0]*high_response_samples.shape[-1],
+                                                             high_response_samples.shape[-2]])
+        low_response_samples = low_response_samples.reshape([low_response_samples.shape[0]*low_response_samples.shape[-1],
+                                                             low_response_samples.shape[-2]])
+
+    print 'reshaped', np.shape(high_response_samples)
+    high_response_samples = np.fliplr(high_response_samples)
+    low_response_samples = np.fliplr(low_response_samples)
+
+
+    # With python's cwt peak finder
+    function_points = np.mean(high_response_samples[:50], axis = 0) # pick top 50 detections
+    ind = find_peaks_cwt(function_points, np.arange(1,3),min_length=1.5) # filter out fewer labels
+
+    function_points_low = np.mean(low_response_samples[:50], axis = 0) # pick top 50 detections
+    ind_low = find_peaks_cwt(function_points_low, np.arange(1,3),min_length=1.5) # filter out fewer labels
+
+    # High sample box plot
+    d = np.zeros(len(wav_freq)).astype(str)
+    d[ind] = np.round(wav_freq[ind]).astype(int)
+    d[np.where(d == '0.0')] = ''
+    print 'y_ticklabels', d[::-1]
+
+    # plt.title('Spectrum of strongest response')
+    # plt.plot(wav_freq, high_response_samples[0])
+    # plt.xlabel('Wavelet centre frequency')
+    # plt.ylabel('Amplitude of wavelet coefficient')
+    # plt.show()
+
+    box_labels = wav_freq.astype(int)[::-1]
 
 
 
+    # f = plt.figure(figsize = (5,5))
+    # ax = plt.subplot()
+    # ax.boxplot(high_response_samples, vert = False, labels=box_labels, manage_xticks=True, showbox=True, showfliers=False,  showmeans=True,  showcaps=True)
+    # ax.set_yticklabels(d[::-1])#, fontsize = 12)
+    # ax.set_title('Strongest positive responses')
+    # plt.ylabel('Wavelet centre frequency')
+    # plt.xlabel('Amplitude of wavelet coefficient')
+    # plt.grid()
+    # if save_fig:
+    #     plt.savefig('../../../TexFiles/Papers/ECML/Images/WavPositive' + suffix + '.pdf')
+    # plt.show()
 
+
+    ### Low sample box plot
+    d = np.zeros(len(wav_freq)).astype(str)
+    d[ind_low] = np.round(wav_freq[ind_low]).astype(int)
+    d[np.where(d == '0.0')] = ''
+    print 'y_ticklabels', d[::-1]
+
+    box_labels = wav_freq.astype(int)[::-1]
+
+
+
+    f = plt.figure(figsize = (5,5))
+    ax = plt.subplot()
+    ax.boxplot(low_response_samples, vert = False, labels=box_labels, manage_xticks=True, showbox=True, showfliers=False,  showmeans=True,  showcaps=True)
+    ax.set_yticklabels(d[::-1])#, fontsize = 12)
+    ax.set_title('Strongest negative responses')
+    plt.ylabel('Wavelet centre frequency')
+    plt.xlabel('Amplitude of wavelet coefficient')
+    plt.grid()
+    # if save_fig:
+    #     plt.savefig('../../../TexFiles/Papers/ECML/Images/WavNegative' + suffix + '.pdf')
+    # plt.show()
+
+
+
+    low_response_samples = np.fliplr(low_response_samples)
+
+
+    label_size = 12
+    plt.rcParams['xtick.labelsize'] = label_size 
+    plt.rcParams['ytick.labelsize'] = label_size 
+
+    plt.figure(figsize = (7,4))
+    box_means = np.mean(high_response_samples, axis = 0)
+    box_means_low = np.mean(low_response_samples, axis = 0)
+    plt.plot(wav_freq, (box_means-np.mean(box_means))/np.std(box_means),'g', label = '$\\mathbf{x}_{1,\\textrm{test}}(f)$' )
+    plt.plot(wav_freq, (box_means_low-np.mean(box_means_low))/np.std(box_means_low),'r', 
+             label = '$\\mathbf{x}_{0,\\textrm{test}}(f)$' )
+    plt.plot(wav_freq,(binned_fft -np.mean(binned_fft))/np.std(binned_fft), 'blue', label = '$\\mathbf{x}_{1,\\textrm{train}}(f)$')
+    plt.plot(wav_freq,(binned_fft_negative -np.mean(binned_fft_negative))/np.std(binned_fft_negative),
+             'k', label = '$\\mathbf{x}_{0,\\textrm{train}}(f)$')
+
+    # plt.plot(wav_freq, (box_means-0),'b', label = 'top score means' )
+    # plt.plot(wav_freq, (box_means_low-0),'.r', label = 'bottom score means' )
+    # plt.plot(wav_freq,(binned_fft -0), 'g', label = 'mosquito mean')
+    # plt.plot(wav_freq,(binned_fft_negative -0), '.k', label = 'noise mean')
+
+    plt.legend(fontsize=12)
+    plt.grid()
+    plt.xlabel('Wavelet centre frequency (Hz)', fontsize = 12)
+    plt.ylabel('Standardised wavelet coefficient amplitude', fontsize = 12)
+    plt.tight_layout()
+    if save_fig:
+        print 'saved fella m8'
+        plt.savefig('../../../TexFiles/Papers/ECML/Images/MeanMosquito' + suffix + '.pdf')
+    plt.show()
+
+    return None
 
 
 
