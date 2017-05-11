@@ -217,9 +217,23 @@ def proc_data_humbug(signal_list, t, fs, img_height = 256, img_width = 10, nfft 
 
 # Wavelet feature extraction
 
+# Create wavelet (optional helper function to visualise process)
+def create_wavelet(wav_params = np.array([3., 0.1]), scales =  bw.create_scale(200.,6000, 5/(2*np.pi), 8000, 20), plot = True):
+    # wavelet parameters: mu, sigma
 
-def proc_data_bumpwav(signal_list, t, fs, img_height, img_width, label_interval = 0.1, binning = 'mean', nfft = 512, overlap = 256, save_weights = False,
-                    ):
+    # scales = bw.create_scale(200.,6000,5/(2*np.pi),fs,50) # low freq, high freq, centre freq, rate, logspacing
+
+    print 'Number of wavelet scales', np.shape(scales)
+
+    wavelet = bw.bumpcwt(scales, wav_params, y, fs)
+    if plot: 
+        plt.plot(wavelet.frequencies)
+        plt.show()
+    return wavelet
+#bw.bumpcwt(scales, wav_params, signal, fs)
+
+def proc_data_bumpwav(signal_list, t, fs, img_height, img_width, wav_params = np.array([3., 0.1]), scales = bw.create_scale(200.,6000, 5/(2*np.pi), 8000, 20),
+ label_interval = 0.1, binning = 'mean', nfft = 512, overlap = 256, save_weights = False):
                
     """Returns the training data x,y and the parameter input_shape required for initialisation of neural networks. 
     
@@ -593,8 +607,20 @@ def plot_output(x_test, y_test, model, median_filtering = False, kernel_size = 3
 ## Analyse statistics of test samples
 
 ############### Chooose whether or not to save figure#################
-def anal_test(predictions, x_test, frac_data = 0.1, save_fig = False, conv = True
+def anal_test(x_train, y_train, predictions, x_test, feat_freq, feat, frac_data = 0.1, save_fig = False, conv = True, latex_labels = False):
     suffix = ''
+
+
+    ### Representative of mozz or no_mozz from raw data labels
+
+    mozz = np.where(y_train[:,0])
+    no_mozz = np.where(y_train[:,1])
+
+    mozz_samples = x_train[mozz].reshape(x_train[mozz].shape[0] * x_train[mozz].shape[-1], x_train[mozz].shape[2])
+    no_mozz_samples = x_train[no_mozz].reshape(x_train[no_mozz].shape[0] * x_train[no_mozz].shape[-1], x_train[no_mozz].shape[2])
+
+    binned_fft = np.mean(mozz_samples, axis = 0)
+    binned_fft_negative = np.mean(no_mozz_samples, axis = 0)
 
 
     #### Statistics of samples that trigger a high response
@@ -624,28 +650,36 @@ def anal_test(predictions, x_test, frac_data = 0.1, save_fig = False, conv = Tru
     low_response_samples = np.fliplr(low_response_samples)
 
 
-    # With python's cwt peak finder
-    function_points = np.mean(high_response_samples[:50], axis = 0) # pick top 50 detections
-    ind = find_peaks_cwt(function_points, np.arange(1,3),min_length=1.5) # filter out fewer labels
+    # # With python's cwt peak finder
+    # function_points = np.mean(high_response_samples[:50], axis = 0) # pick top 50 detections
+    # ind = find_peaks_cwt(function_points, np.arange(1,3),min_length=1.5) # filter out fewer labels
 
-    function_points_low = np.mean(low_response_samples[:50], axis = 0) # pick top 50 detections
-    ind_low = find_peaks_cwt(function_points_low, np.arange(1,3),min_length=1.5) # filter out fewer labels
+    # function_points_low = np.mean(low_response_samples[:50], axis = 0) # pick top 50 detections
+    # ind_low = find_peaks_cwt(function_points_low, np.arange(1,3),min_length=1.5) # filter out fewer labels
 
-    # High sample box plot
-    d = np.zeros(len(wav_freq)).astype(str)
-    d[ind] = np.round(wav_freq[ind]).astype(int)
-    d[np.where(d == '0.0')] = ''
-    print 'y_ticklabels', d[::-1]
+    # # High sample box plot
+    # d = np.zeros(len(wav_freq)).astype(str)
+    # d[ind] = np.round(wav_freq[ind]).astype(int)
+    # d[np.where(d == '0.0')] = ''
+    # print 'y_ticklabels', d[::-1]
 
     # plt.title('Spectrum of strongest response')
     # plt.plot(wav_freq, high_response_samples[0])
     # plt.xlabel('Wavelet centre frequency')
     # plt.ylabel('Amplitude of wavelet coefficient')
     # plt.show()
-
-    box_labels = wav_freq.astype(int)[::-1]
-
-
+    if feat == 'wav':
+        box_labels = feat_freq.astype(int)[::-1]
+        feat_freq = feat_freq
+        x_label = 'Wavelet centre frequency (Hz)'
+        print 'Wavelet feature representation'
+    elif feat == 'spec': 
+        box_labels = feat_freq.astype(int)
+        feat_freq = feat_freq[::-1]
+        x_label = 'Spectrogram frequency (Hz)'
+        print 'Spectogram feature representation'
+    else:
+        print 'Feature representation not recognised.'
 
     # f = plt.figure(figsize = (5,5))
     # ax = plt.subplot()
@@ -660,46 +694,57 @@ def anal_test(predictions, x_test, frac_data = 0.1, save_fig = False, conv = Tru
     # plt.show()
 
 
-    ### Low sample box plot
-    d = np.zeros(len(wav_freq)).astype(str)
-    d[ind_low] = np.round(wav_freq[ind_low]).astype(int)
-    d[np.where(d == '0.0')] = ''
-    print 'y_ticklabels', d[::-1]
+    # ### Low sample box plot
+    # d = np.zeros(len(wav_freq)).astype(str)
+    # d[ind_low] = np.round(wav_freq[ind_low]).astype(int)
+    # d[np.where(d == '0.0')] = ''
+    # print 'y_ticklabels', d[::-1]
 
-    box_labels = wav_freq.astype(int)[::-1]
+    # box_labels = wav_freq.astype(int)[::-1]
 
 
 
-    f = plt.figure(figsize = (5,5))
-    ax = plt.subplot()
-    ax.boxplot(low_response_samples, vert = False, labels=box_labels, manage_xticks=True, showbox=True, showfliers=False,  showmeans=True,  showcaps=True)
-    ax.set_yticklabels(d[::-1])#, fontsize = 12)
-    ax.set_title('Strongest negative responses')
-    plt.ylabel('Wavelet centre frequency')
-    plt.xlabel('Amplitude of wavelet coefficient')
-    plt.grid()
+    # f = plt.figure(figsize = (5,5))
+    # ax = plt.subplot()
+    # ax.boxplot(low_response_samples, vert = False, labels=box_labels, manage_xticks=True, showbox=True, showfliers=False,  showmeans=True,  showcaps=True)
+    # ax.set_yticklabels(d[::-1])#, fontsize = 12)
+    # ax.set_title('Strongest negative responses')
+    # plt.ylabel('Wavelet centre frequency')
+    # plt.xlabel('Amplitude of wavelet coefficient')
+    # plt.grid()
     # if save_fig:
     #     plt.savefig('../../../TexFiles/Papers/ECML/Images/WavNegative' + suffix + '.pdf')
     # plt.show()
 
 
 
-    low_response_samples = np.fliplr(low_response_samples)
+    # low_response_samples = np.fliplr(low_response_samples)
 
-
-    label_size = 12
-    plt.rcParams['xtick.labelsize'] = label_size 
-    plt.rcParams['ytick.labelsize'] = label_size 
-
+    if latex_labels:
+        label_size = 12
+        plt.rcParams['xtick.labelsize'] = label_size 
+        plt.rcParams['ytick.labelsize'] = label_size 
+        #Optional: LaTeX cm font (slow)
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='serif')
+        test_1 = '$\\mathbf{x}_{1,\\textrm{test}}(f)$'
+        test_0 = '$\\mathbf{x}_{0,\\textrm{test}}(f)$'
+        train_1 = '$\\mathbf{x}_{1,\\textrm{train}}(f)$'
+        train_0 = '$\\mathbf{x}_{0,\\textrm{train}}(f)$'
+    else:
+        test_1 = 'x_1_test(f)'
+        test_0 = 'x_0_test(f)'
+        train_1 = 'x_1_train(f)'
+        train_0 = 'x_0_test(f)'
     plt.figure(figsize = (7,4))
     box_means = np.mean(high_response_samples, axis = 0)
     box_means_low = np.mean(low_response_samples, axis = 0)
-    plt.plot(wav_freq, (box_means-np.mean(box_means))/np.std(box_means),'g', label = '$\\mathbf{x}_{1,\\textrm{test}}(f)$' )
-    plt.plot(wav_freq, (box_means_low-np.mean(box_means_low))/np.std(box_means_low),'r', 
-             label = '$\\mathbf{x}_{0,\\textrm{test}}(f)$' )
-    plt.plot(wav_freq,(binned_fft -np.mean(binned_fft))/np.std(binned_fft), 'blue', label = '$\\mathbf{x}_{1,\\textrm{train}}(f)$')
-    plt.plot(wav_freq,(binned_fft_negative -np.mean(binned_fft_negative))/np.std(binned_fft_negative),
-             'k', label = '$\\mathbf{x}_{0,\\textrm{train}}(f)$')
+    plt.plot(feat_freq, (box_means-np.mean(box_means))/np.std(box_means),'g', label = test_1)
+    plt.plot(feat_freq, (box_means_low-np.mean(box_means_low))/np.std(box_means_low),'r', 
+             label = test_0)
+    plt.plot(feat_freq,(binned_fft -np.mean(binned_fft))/np.std(binned_fft), 'blue', label = train_1)
+    plt.plot(feat_freq,(binned_fft_negative -np.mean(binned_fft_negative))/np.std(binned_fft_negative),
+             'k', label = train_0)
 
     # plt.plot(wav_freq, (box_means-0),'b', label = 'top score means' )
     # plt.plot(wav_freq, (box_means_low-0),'.r', label = 'bottom score means' )
@@ -708,12 +753,12 @@ def anal_test(predictions, x_test, frac_data = 0.1, save_fig = False, conv = Tru
 
     plt.legend(fontsize=12)
     plt.grid()
-    plt.xlabel('Wavelet centre frequency (Hz)', fontsize = 12)
-    plt.ylabel('Standardised wavelet coefficient amplitude', fontsize = 12)
+    plt.xlabel(x_label, fontsize = 12)
+    plt.ylabel('Standardised coefficient amplitude', fontsize = 12)
     plt.tight_layout()
     if save_fig:
-        print 'saved fella m8'
-        plt.savefig('../../../TexFiles/Papers/ECML/Images/MeanMosquito' + suffix + '.pdf')
+        print 'saved figure'
+        plt.savefig('Outputs/figures/MeanMosquito' + suffix + '.pdf')
     plt.show()
 
     return None
