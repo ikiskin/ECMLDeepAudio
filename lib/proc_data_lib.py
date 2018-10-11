@@ -217,21 +217,6 @@ def proc_data_humbug(signal_list, t, fs, img_height = 256, img_width = 10, nfft 
 
 # Wavelet feature extraction
 
-# Create wavelet (optional helper function to visualise process)
-def create_wavelet(wav_params = np.array([3., 0.1]), scales =  bw.create_scale(200.,6000, 5/(2*np.pi), 8000, 20), plot = True):
-    # wavelet parameters: mu, sigma
-
-    # scales = bw.create_scale(200.,6000,5/(2*np.pi),fs,50) # low freq, high freq, centre freq, rate, logspacing
-
-    print 'Number of wavelet scales', np.shape(scales)
-
-    wavelet = bw.bumpcwt(scales, wav_params, y, fs)
-    if plot: 
-        plt.plot(wavelet.frequencies)
-        plt.show()
-    return wavelet
-#bw.bumpcwt(scales, wav_params, signal, fs)
-
 def proc_data_bumpwav(signal_list, t, fs, img_height, img_width, wav_params = np.array([3., 0.1]), scales = bw.create_scale(200.,6000, 5/(2*np.pi), 8000, 20),
  label_interval = 0.1, binning = 'mean', nfft = 512, overlap = 256, save_weights = False):
                
